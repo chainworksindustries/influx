@@ -1,0 +1,9 @@
+Building Minerals
+
+See doc/readme-qt.rst for instructions on building Minerals QT,
+the intended-for-end-users, nice-graphical-interface, reference
+implementation of Minerals.
+
+See doc/build-*.txt for instructions on building Mineralsd,
+the intended-for-services, no-graphical-interface, reference
+implementation of Minerals.
