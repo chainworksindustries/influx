@@ -529,7 +529,14 @@ void StakeMiner(CWallet *pwallet)
     {
         if (fShutdown)
             return;
-
+			
+		while (GetAdjustedTime() < FORK_TIME)
+		{
+			MilliSleep(5000);
+		    if (fShutdown)
+            return;
+		}
+		
         while (pwallet->IsLocked())
         {
             nLastCoinStakeSearchInterval = 0;
@@ -550,7 +557,7 @@ void StakeMiner(CWallet *pwallet)
         if (fTryToSync)
         {
             fTryToSync = false;
-            if (vNodes.size() < 3 || nBestHeight < GetNumBlocksOfPeers())
+            if (vNodes.size() < 3 || nBestHeight < GetNumBlocksOfPeers() || nBestHeight < FORK_HEIGHT)
             {
                 MilliSleep(60000);
                 continue;

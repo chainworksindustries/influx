@@ -49,7 +49,7 @@ double GetPoWMHashPS()
         return 0;
 
     int nPoWInterval = 72;
-    int64_t nTargetSpacingWorkMin = 30, nTargetSpacingWork = 30;
+    int64_t nTargetSpacingWorkMin = 240, nTargetSpacingWork = 240;
 
     CBlockIndex* pindex = pindexGenesisBlock;
     CBlockIndex* pindexPrevWork = pindexGenesisBlock;

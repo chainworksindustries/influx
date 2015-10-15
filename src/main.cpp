@@ -41,8 +41,8 @@ CBigNum bnProofOfStakeLimit(~uint256(0) >> 20);
 CBigNum bnProofOfWorkLimitTestNet(~uint256(0) >> 16);
 
 unsigned int nTargetSpacing = 7 * 60;
-unsigned int nStakeMinAge = 60 * 60 * 24 * 30;
-unsigned int nStakeMaxAge = 60 * 60 * 24 * 90;          
+unsigned int nStakeMinAge = 60 * 60 * 24 * 2;
+unsigned int nStakeMaxAge = 60 * 60 * 24 * 60;          
 unsigned int nModifierInterval = 20 * 60; // time to elapse before new modifier is computed
 
 int nCoinbaseMaturity = 50;
@@ -967,6 +967,9 @@ uint256 WantedByOrphan(const CBlock* pblockOrphan)
 int64_t GetProofOfWorkReward(int64_t nFees, int nHeight)
 {
     int64_t nSubsidy = 50 * COIN;
+	
+	if (nHeight > FORK_HEIGHT)
+		nSubsidy = 25 * COIN;
     
 	// Force block reward to zero when right shift is undefined.
     int halvings = nHeight / 120000;
@@ -983,11 +986,14 @@ int64_t GetProofOfWorkReward(int64_t nFees, int nHeight)
 
 const int DAILY_BLOCKCOUNT =  1440 / 7;
 // miner's coin stake reward based on coin age spent (coin-days)
-int64_t GetProofOfStakeReward(int64_t nCoinAge, int64_t nFees)
+int64_t GetProofOfStakeReward(int64_t nCoinAge, int64_t nFees, int nHeight)
 {
     int64_t nRewardCoinYear;
 
-    nRewardCoinYear = COIN_YEAR_REWARD;
+    nRewardCoinYear = 8 * CENT;
+	
+	if (nHeight < FORK_HEIGHT)
+		nRewardCoinYear = 3 * CENT;
 
     int64_t nSubsidy = nCoinAge * nRewardCoinYear / 365 / COIN;
 
@@ -1048,6 +1054,11 @@ const CBlockIndex* GetLastBlockIndex(const CBlockIndex* pindex, bool fProofOfSta
 static unsigned int GetNextTargetRequired_(const CBlockIndex* pindexLast, bool fProofOfStake)
 {
     CBigNum bnTargetLimit = fProofOfStake ? bnProofOfStakeLimit : bnProofOfWorkLimit;
+	
+	if (pindexLast->nHeight + 1 > FORK_HEIGHT)
+		nTargetSpacing = 4 * 60;
+	else 
+		nTargetSpacing = 7 * 60;
 
     if (pindexLast == NULL)
         return bnTargetLimit.GetCompact(); // genesis block
@@ -1587,7 +1598,7 @@ bool CBlock::ConnectBlock(CTxDB& txdb, CBlockIndex* pindex, bool fJustCheck)
         if (!vtx[1].GetCoinAge(txdb, nCoinAge))
             return error("ConnectBlock() : %s unable to get coin age for coinstake", vtx[1].GetHash().ToString().substr(0,10).c_str());
 
-        int64_t nCalculatedStakeReward = GetProofOfStakeReward(nCoinAge, nFees);
+        int64_t nCalculatedStakeReward = GetProofOfStakeReward(nCoinAge, nFees, pindex->nHeight);
 
         if (nStakeReward > nCalculatedStakeReward)
             return DoS(100, error("ConnectBlock() : coinstake pays too much(actual=%"PRId64" vs calculated=%"PRId64")", nStakeReward, nCalculatedStakeReward));
