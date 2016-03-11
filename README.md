@@ -14,21 +14,13 @@ To install Influx-QT via bash script to a RaspberryPi 2, simply copy and paste t
 
 wget https://gist.githubusercontent.com/sigwo/571296dcb54ff6d4109b/raw/31581df4713f979b4406486f3071291579745c90/install-INFX.sh;chmod +x install-INFX.sh;sh ./install-INFX.sh
 
-
+===========================
 
 
 Influx official development tree
 
 Influx - a hybrid scrypt PoW + PoS based cryptocurrency.
 
-* 10 minutes stake spacing
-* 30 minutes PoW spacing
-* Balanced PoW blocks and stakes weighting
-* The PoW subsidy halves every x64 multiply of PoW difficulty
-* The PoS interest halves every x64 multiply of PoS difficulty
-* Maximum PoW reward is 100 coins
-* Maximum PoS reward is 10 coins
-* No deterministic limit of the supply, currently ~ 1282144 coins mined
 
 Development process
 ===========================
