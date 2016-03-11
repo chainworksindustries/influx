@@ -1,0 +1,11 @@
+[Unit]
+Description=Influx daemon serivce
+After=network.target
+
+[Service]
+Type=simple
+User=Influx
+ExecStart=/opt/Influx/Influxd
+
+[Install]
+WantedBy=multi-user.target

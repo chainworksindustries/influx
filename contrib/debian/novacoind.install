@@ -1,0 +1,2 @@
+debian/bin/Influxd usr/bin
+src/Influxd usr/lib/Influx

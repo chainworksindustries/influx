@@ -1,15 +1,19 @@
 // Copyright (c) 2012 The Bitcoin developers
 // Distributed under the MIT/X11 software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
 #ifndef CHECKQUEUE_H
 #define CHECKQUEUE_H
 
-#include <boost/thread/mutex.hpp>
-#include <boost/thread/locks.hpp>
-#include <boost/thread/condition_variable.hpp>
-
-#include <vector>
 #include <algorithm>
+#include <vector>
+
+#include <boost/foreach.hpp>
+#include <boost/thread/condition_variable.hpp>
+#include <boost/thread/locks.hpp>
+#include <boost/thread/mutex.hpp>
+
+extern bool fShutdown;
 
 template<typename T> class CCheckQueueControl;
 
@@ -32,6 +36,9 @@ private:
 
     // Master thread blocks on this when out of work
     boost::condition_variable condMaster;
+
+    // Quit method blocks on this until all workers are gone
+    boost::condition_variable condQuit;
 
     // The queue of elements to be processed.
     // As the order of booleans doesn't matter, it is used as a LIFO (stack)
@@ -82,6 +89,8 @@ private:
                 while (queue.empty()) {
                     if ((fMaster || fQuit) && nTodo == 0) {
                         nTotal--;
+                        if (nTotal==0)
+                            condQuit.notify_one();
                         bool fRet = fAllOk;
                         // reset the status for new work later
                         if (fMaster)
@@ -114,7 +123,8 @@ private:
                 if (fOk)
                     fOk = check();
             vChecks.clear();
-        } while(true);
+        } while(true && !fShutdown); // HACK: force queue to shut down
+        return false;
     }
 
 public:
@@ -146,10 +156,27 @@ public:
             condWorker.notify_all();
     }
 
-    ~CCheckQueue() {
+    // Shut the queue down
+    void Quit() {
+        boost::unique_lock<boost::mutex> lock(mutex);
+        fQuit = true;
+        // No need to wake the master, as he will quit automatically when all jobs are
+        // done.
+        condWorker.notify_all(); 
+
+        while (nTotal > 0)
+            condQuit.wait(lock);
     }
 
-    friend class CCheckQueueControl<T>;
+    ~CCheckQueue() {
+        Quit();
+    }
+
+    bool IsIdle()
+    {
+        boost::unique_lock<boost::mutex> lock(mutex);
+        return (nTotal == nIdle && nTodo == 0 && fAllOk == true);
+    }
 };
 
 /** RAII-style controller object for a CCheckQueue that guarantees the passed
@@ -164,9 +191,8 @@ public:
     CCheckQueueControl(CCheckQueue<T> *pqueueIn) : pqueue(pqueueIn), fDone(false) {
         // passed queue is supposed to be unused, or NULL
         if (pqueue != NULL) {
-            assert(pqueue->nTotal == pqueue->nIdle);
-            assert(pqueue->nTodo == 0);
-            assert(pqueue->fAllOk == true);
+            bool isIdle = pqueue->IsIdle();
+            assert(isIdle);
         }
     }
 

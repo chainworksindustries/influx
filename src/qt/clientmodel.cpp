@@ -11,6 +11,9 @@
 #include <QDateTime>
 #include <QTimer>
 
+extern double GetPoSKernelPS();
+extern double GetDifficulty(const CBlockIndex* blockindex);
+
 static const int64_t nClientStartupTime = GetTime();
 
 ClientModel::ClientModel(OptionsModel *optionsModel, QObject *parent) :
@@ -32,9 +35,31 @@ ClientModel::~ClientModel()
     unsubscribeFromCoreSignals();
 }
 
-int ClientModel::getNumConnections() const
+double ClientModel::getPoSKernelPS()
 {
-    return vNodes.size();
+    return GetPoSKernelPS();
+}
+
+double ClientModel::getDifficulty(bool fProofofStake)
+{
+    if (fProofofStake)
+       return GetDifficulty(GetLastBlockIndex(pindexBest,true));
+    else
+       return GetDifficulty(GetLastBlockIndex(pindexBest,false));
+}
+
+int ClientModel::getNumConnections(uint8_t flags) const
+{
+    LOCK(cs_vNodes);
+    if (flags == CONNECTIONS_ALL) // Shortcut if we want total
+        return (int)(vNodes.size());
+
+    int nNum = 0;
+    BOOST_FOREACH(CNode* pnode, vNodes)
+    if (flags & (pnode->fInbound ? CONNECTIONS_IN : CONNECTIONS_OUT))
+        nNum++;
+
+    return nNum;
 }
 
 int ClientModel::getNumBlocks() const
@@ -48,12 +73,22 @@ int ClientModel::getNumBlocksAtStartup()
     return numBlocksAtStartup;
 }
 
+quint64 ClientModel::getTotalBytesRecv() const
+{
+    return CNode::GetTotalBytesRecv();
+}
+
+quint64 ClientModel::getTotalBytesSent() const
+{
+    return CNode::GetTotalBytesSent();
+}
+
 QDateTime ClientModel::getLastBlockDate() const
 {
     if (pindexBest)
         return QDateTime::fromTime_t(pindexBest->GetBlockTime());
     else
-        return QDateTime::fromTime_t(1393221600); // Genesis block's time
+        return QDateTime::fromTime_t(1360105017); // Genesis block's time
 }
 
 void ClientModel::updateTimer()
@@ -70,6 +105,8 @@ void ClientModel::updateTimer()
 
         emit numBlocksChanged(newNumBlocks, newNumBlocksOfPeers);
     }
+
+    emit bytesChanged(getTotalBytesRecv(), getTotalBytesSent());
 }
 
 void ClientModel::updateNumConnections(int numConnections)

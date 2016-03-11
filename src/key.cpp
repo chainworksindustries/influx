@@ -120,6 +120,51 @@ err:
     return ret;
 }
 
+int CompareBigEndian(const unsigned char *c1, size_t c1len, const unsigned char *c2, size_t c2len) {
+    while (c1len > c2len) {
+        if (*c1)
+            return 1;
+        c1++;
+        c1len--;
+    }
+    while (c2len > c1len) {
+        if (*c2)
+            return -1;
+        c2++;
+        c2len--;
+    }
+    while (c1len > 0) {
+        if (*c1 > *c2)
+            return 1;
+        if (*c2 > *c1)
+            return -1;
+        c1++;
+        c2++;
+        c1len--;
+    }
+    return 0;
+}
+
+// Order of secp256k1's generator minus 1.
+const unsigned char vchMaxModOrder[32] = {
+    0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,
+    0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFE,
+    0xBA,0xAE,0xDC,0xE6,0xAF,0x48,0xA0,0x3B,
+    0xBF,0xD2,0x5E,0x8C,0xD0,0x36,0x41,0x40
+};
+
+// Half of the order of secp256k1's generator minus 1.
+const unsigned char vchMaxModHalfOrder[32] = {
+    0x7F,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,
+    0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,
+    0x5D,0x57,0x6E,0x73,0x57,0xA4,0x50,0x1D,
+    0xDF,0xE9,0x2F,0x46,0x68,0x1B,0x20,0xA0
+};
+
+const unsigned char *vchZero = NULL;
+
+
+
 void CKey::SetCompressedPubKey()
 {
     EC_KEY_set_conv_form(pkey, POINT_CONVERSION_COMPRESSED);
@@ -149,6 +194,7 @@ CKey::CKey(const CKey& b)
     if (pkey == NULL)
         throw key_error("CKey::CKey(const CKey&) : EC_KEY_dup failed");
     fSet = b.fSet;
+    fCompressedPubKey = b.fCompressedPubKey;
 }
 
 CKey& CKey::operator=(const CKey& b)
@@ -156,6 +202,7 @@ CKey& CKey::operator=(const CKey& b)
     if (!EC_KEY_copy(pkey, b.pkey))
         throw key_error("CKey::operator=(const CKey&) : EC_KEY_copy failed");
     fSet = b.fSet;
+    fCompressedPubKey = b.fCompressedPubKey;
     return (*this);
 }
 
@@ -172,6 +219,37 @@ bool CKey::IsNull() const
 bool CKey::IsCompressed() const
 {
     return fCompressedPubKey;
+}
+
+bool CKey::CheckSignatureElement(const unsigned char *vch, int len, bool half) {
+    return CompareBigEndian(vch, len, vchZero, 0) > 0 &&
+        CompareBigEndian(vch, len, half ? vchMaxModHalfOrder : vchMaxModOrder, 32) <= 0;
+}
+
+bool CKey::ReserealizeSignature(std::vector<unsigned char>& vchSig)
+{
+    if (vchSig.empty())
+        return false;
+
+    unsigned char *pos = &vchSig[0];
+    ECDSA_SIG *sig = d2i_ECDSA_SIG(NULL, (const unsigned char **)&pos, vchSig.size());
+    if (sig == NULL)
+        return false;
+
+    bool ret = false;
+    int nSize = i2d_ECDSA_SIG(sig, NULL);
+    if (nSize > 0) {
+        vchSig.resize(nSize); // grow or shrink as needed
+
+        pos = &vchSig[0];
+        i2d_ECDSA_SIG(sig, &pos);
+
+        ret = true;
+    }
+
+    ECDSA_SIG_free(sig);
+
+    return ret;
 }
 
 void CKey::MakeNewKey(bool fCompressed)
@@ -287,27 +365,27 @@ bool CKey::Sign(uint256 hash, std::vector<unsigned char>& vchSig)
 {
     vchSig.clear();
     ECDSA_SIG *sig = ECDSA_do_sign((unsigned char*)&hash, sizeof(hash), pkey);
-    if (sig == NULL)
+    if (sig==NULL)
         return false;
-    BN_CTX *ctx = BN_CTX_new();
-    BN_CTX_start(ctx);
     const EC_GROUP *group = EC_KEY_get0_group(pkey);
-    BIGNUM *order = BN_CTX_get(ctx);
-    BIGNUM *halforder = BN_CTX_get(ctx);
-    EC_GROUP_get_order(group, order, ctx);
-    BN_rshift1(halforder, order);
-    if (BN_cmp(sig->s, halforder) > 0) {
-        // enforce low S values, by negating the value (modulo the order) if above order/2.
-        BN_sub(sig->s, order, sig->s);
+    CBigNum order, halforder;
+    EC_GROUP_get_order(group, &order, NULL);
+    BN_rshift1(&halforder, &order);
+    // enforce low S values, by negating the value (modulo the order) if above order/2.
+    if (BN_cmp(sig->s, &halforder) > 0) {
+        BN_sub(sig->s, &order, sig->s);
     }
-    BN_CTX_end(ctx);
-    BN_CTX_free(ctx);
     unsigned int nSize = ECDSA_size(pkey);
     vchSig.resize(nSize); // Make sure it is big enough
     unsigned char *pos = &vchSig[0];
     nSize = i2d_ECDSA_SIG(sig, &pos);
     ECDSA_SIG_free(sig);
     vchSig.resize(nSize); // Shrink to fit actual size
+    // Testing our new signature
+    if (ECDSA_verify(0, (unsigned char*)&hash, sizeof(hash), &vchSig[0], vchSig.size(), pkey) != 1) {
+        vchSig.clear();
+        return false;
+    }
     return true;
 }
 
@@ -321,14 +399,22 @@ bool CKey::SignCompact(uint256 hash, std::vector<unsigned char>& vchSig)
     ECDSA_SIG *sig = ECDSA_do_sign((unsigned char*)&hash, sizeof(hash), pkey);
     if (sig==NULL)
         return false;
+    const EC_GROUP *group = EC_KEY_get0_group(pkey);
+    CBigNum order, halforder;
+    EC_GROUP_get_order(group, &order, NULL);
+    BN_rshift1(&halforder, &order);
+    // enforce low S values, by negating the value (modulo the order) if above order/2.
+    if (BN_cmp(sig->s, &halforder) > 0) {
+        BN_sub(sig->s, &order, sig->s);
+    }
     vchSig.clear();
     vchSig.resize(65,0);
     int nBitsR = BN_num_bits(sig->r);
     int nBitsS = BN_num_bits(sig->s);
     if (nBitsR <= 256 && nBitsS <= 256)
     {
-        int nRecId = -1;
-        for (int i=0; i<4; i++)
+        int8_t nRecId = -1;
+        for (int8_t i=0; i<4; i++)
         {
             CKey keyRec;
             keyRec.fSet = true;
@@ -389,24 +475,8 @@ bool CKey::SetCompactSignature(uint256 hash, const std::vector<unsigned char>& v
     return false;
 }
 
-bool CKey::Verify(uint256 hash, const std::vector<unsigned char>& vchSigParam)
+bool CKey::Verify(uint256 hash, const std::vector<unsigned char>& vchSig)
 {
-    // Remove extra length bytes
-    std::vector<unsigned char> vchSig(vchSigParam.begin(), vchSigParam.end());
-    if (vchSig.size() > 1 && vchSig[1] & 0x80)
-    {
-        unsigned char nLengthBytes = vchSig[1] & 0x7f;
-        if (nLengthBytes > 4)
-        {
-            unsigned char nExtraBytes = nLengthBytes - 4;
-            for (unsigned char i = 0; i < nExtraBytes; i++)
-                if (vchSig[2 + i])
-                    return false;
-            vchSig.erase(vchSig.begin() + 2, vchSig.begin() + 2 + nExtraBytes);
-            vchSig[1] = 0x80 | (nLengthBytes - nExtraBytes);
-        }
-    }
-
     if (vchSig.empty())
         return false;
 
@@ -418,11 +488,11 @@ bool CKey::Verify(uint256 hash, const std::vector<unsigned char>& vchSigParam)
     if (d2i_ECDSA_SIG(&norm_sig, &sigptr, vchSig.size()) == NULL)
     {
         /* As of OpenSSL 1.0.0p d2i_ECDSA_SIG frees and nulls the pointer on
-         * error. But OpenSSL's own use of this function redundantly frees the
-         * result. As ECDSA_SIG_free(NULL) is a no-op, and in the absence of a
-         * clear contract for the function behaving the same way is more
-         * conservative.
-         */
+        * error. But OpenSSL's own use of this function redundantly frees the
+        * result. As ECDSA_SIG_free(NULL) is a no-op, and in the absence of a
+        * clear contract for the function behaving the same way is more
+        * conservative.
+        */
         ECDSA_SIG_free(norm_sig);
         return false;
     }

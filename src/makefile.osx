@@ -3,7 +3,7 @@
 # Distributed under the MIT/X11 software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-# Mac OS X makefile for Minerals
+# Mac OS X makefile for bitcoin
 # Originally by Laszlo Hanyecz (solar@heliacal.net)
 
 CXX=llvm-g++
@@ -19,13 +19,13 @@ LIBPATHS= \
  -L"$(DEPSDIR)/lib" \
  -L"$(DEPSDIR)/lib/db48"
 
-USE_UPNP:=1
+USE_LEVELDB:=1
 USE_IPV6:=1
 
 LIBS= -dead_strip
 
 ifdef STATIC
-# Build STATIC if you are redistributing the Influxd binary
+# Build STATIC if you are redistributing the bitcoind binary
 LIBS += \
  $(DEPSDIR)/lib/db48/libdb_cxx-4.8.a \
  $(DEPSDIR)/lib/libboost_system-mt.a \
@@ -47,15 +47,15 @@ LIBS += \
  -lz
 endif
 
-DEFS=-DMAC_OSX -DMSG_NOSIGNAL=0 -DBOOST_SPIRIT_THREADSAFE
+DEFS=-DMAC_OSX -DMSG_NOSIGNAL=0 -DBOOST_SPIRIT_THREADSAFE -D__STDC_FORMAT_MACROS -D__STDC_LIMIT_MACROS
 
 ifdef RELEASE
 # Compile for maximum compatibility and smallest size.
 # This requires that dependencies are compiled
 # the same way.
-CFLAGS = -mmacosx-version-min=10.5 -arch x86_64 -O3 -msse2
+CFLAGS = -O2 -msse2 -mssse3
 else
-CFLAGS = -g -msse2
+CFLAGS = -g -msse2 -mssse3
 endif
 
 # ppc doesn't work because we don't support big-endian
@@ -63,12 +63,24 @@ CFLAGS += -Wall -Wextra -Wformat -Wno-ignored-qualifiers -Wformat-security -Wno-
     $(DEBUGFLAGS) $(DEFS) $(INCLUDEPATHS)
 
 OBJS= \
+    obj/groestl.o \
+    obj/blake.o \
+    obj/bmw.o \
+    obj/skein.o \
+    obj/keccak.o \
+    obj/shavite.o \
+    obj/jh.o \
+    obj/luffa.o \
+    obj/cubehash.o \
+    obj/echo.o \
+    obj/simd.o \
     obj/alert.o \
     obj/version.o \
     obj/checkpoints.o \
     obj/netbase.o \
     obj/addrman.o \
     obj/crypter.o \
+    obj/base58.o \
     obj/key.o \
     obj/db.o \
     obj/init.o \
@@ -77,6 +89,8 @@ OBJS= \
     obj/main.o \
     obj/miner.o \
     obj/net.o \
+    obj/ntp.o \
+    obj/stun.o \
     obj/protocol.o \
     obj/bitcoinrpc.o \
     obj/rpcdump.o \
@@ -91,33 +105,8 @@ OBJS= \
     obj/wallet.o \
     obj/walletdb.o \
     obj/noui.o \
-    obj/pbkdf2.o \
     obj/kernel.o \
-    obj/scrypt.o \
-    obj/scrypt-x86.o \
-    obj/scrypt-x86_64.o \
-    obj/zerocoin/Accumulator.o \
-    obj/zerocoin/AccumulatorProofOfKnowledge.o \
-    obj/zerocoin/Coin.o \
-    obj/zerocoin/CoinSpend.o \
-    obj/zerocoin/Commitment.o \
-    obj/zerocoin/ParamGeneration.o \
-    obj/zerocoin/Params.o \
-    obj/zerocoin/SerialNumberSignatureOfKnowledge.o \
-    obj/zerocoin/SpendMetaData.o \
-    obj/zerocoin/ZeroTest.o
-
-ifndef USE_UPNP
-	override USE_UPNP = -
-endif
-ifneq (${USE_UPNP}, -)
-	DEFS += -DUSE_UPNP=$(USE_UPNP)
-ifdef STATIC
-	LIBS += $(DEPSDIR)/lib/libminiupnpc.a
-else
-	LIBS += -lminiupnpc
-endif
-endif
+    obj/kernel_worker.o
 
 ifneq (${USE_IPV6}, -)
 	DEFS += -DUSE_IPV6=$(USE_IPV6)
@@ -125,13 +114,60 @@ endif
 
 all: Influxd
 
+#
+# LevelDB support
+#
+ifdef USE_LEVELDB
 LIBS += $(CURDIR)/leveldb/libleveldb.a $(CURDIR)/leveldb/libmemenv.a
-DEFS += $(addprefix -I,$(CURDIR)/leveldb/include)
+DEFS += $(addprefix -I,$(CURDIR)/leveldb/include) -DUSE_LEVELDB
 DEFS += $(addprefix -I,$(CURDIR)/leveldb/helpers)
 OBJS += obj/txdb-leveldb.o
 leveldb/libleveldb.a:
 	@echo "Building LevelDB ..."; cd leveldb; make; cd ..
 obj/txdb-leveldb.o: leveldb/libleveldb.a
+else
+OBJS += obj/txdb-bdb.o
+endif
+
+ifeq (${USE_ASM}, 1)
+# Assembler implementation
+OBJS += crypto/scrypt/asm/obj/scrypt-x86.o crypto/scrypt/asm/obj/scrypt-x86_64.o crypto/scrypt/asm/obj/asm-wrapper.o
+OBJS += crypto/sha2/asm/obj/sha2-x86.o crypto/sha2/asm/obj/sha2-x86_64.o
+
+crypto/scrypt/asm/obj/scrypt-x86.o: crypto/scrypt/asm/scrypt-x86.S
+	$(CXX) -c $(CFLAGS) -MMD -o $@ $<
+
+crypto/scrypt/asm/obj/scrypt-x86_64.o: crypto/scrypt/asm/scrypt-x86_64.S
+	$(CXX) -c $(CFLAGS) -MMD -o $@ $<
+
+crypto/scrypt/asm/obj/asm-wrapper.o: crypto/scrypt/asm/asm-wrapper.cpp
+	$(CXX) -c $(CFLAGS) -MMD -o $@ $<
+
+crypto/sha2/asm/obj/sha2-x86.o: crypto/sha2/asm/sha2-x86.S
+	$(CXX) -c $(CFLAGS) -MMD -o $@ $<
+
+crypto/sha2/asm/obj/sha2-x86_64.o: crypto/sha2/asm/sha2-x86_64.S
+	$(CXX) -c $(CFLAGS) -MMD -o $@ $<
+
+DEFS += -DUSE_ASM
+
+else
+ifeq  (${USE_SSE2}, 1)
+# Intrinsic implementation
+DEFS += -DUSE_SSE2
+OBJS += crypto/scrypt/intrin/obj/scrypt-sse2.o
+
+crypto/scrypt/intrin/obj/scrypt-sse2.o: crypto/scrypt/intrin/scrypt-sse2.cpp
+	$(CXX) -c $(CFLAGS) -MMD -o $@ $<
+else
+# Generic implementation
+OBJS += crypto/scrypt/generic/obj/scrypt-generic.o
+
+crypto/scrypt/generic/obj/scrypt-generic.o: crypto/scrypt/generic/scrypt-generic.cpp
+	$(CXX) -c $(CFLAGS) -MMD -o $@ $<
+endif
+endif
+
 
 # auto-generated dependencies:
 -include obj/*.P
@@ -141,6 +177,21 @@ obj/build.h: FORCE
 version.cpp: obj/build.h
 DEFS += -DHAVE_BUILD_INFO
 
+obj/scrypt-x86.o: scrypt-x86.S
+	$(CXX) -c $(xCXXFLAGS) -MMD -o $@ $<
+obj/scrypt-x86_64.o: scrypt-x86_64.S
+	$(CXX) -c $(xCXXFLAGS) -MMD -o $@ $<
+obj/scrypt-arm.o: scrypt-arm.S
+	$(CXX) -c $(xCXXFLAGS) -MMD -o $@ $<
+	
+obj/%.o: %.c
+	$(CXX) -c $(xCXXFLAGS) -fpermissive -MMD -MF $(@:%.o=%.d) -o $@ $<
+	@cp $(@:%.o=%.d) $(@:%.o=%.P); \
+	  sed -e 's/#.*//' -e 's/^[^:]*: *//' -e 's/ *\\$$//' \
+              -e '/^$$/ d' -e 's/$$/ :/' < $(@:%.o=%.d) >> $(@:%.o=%.P); \
+	      
+	rm -f $(@:%.o=%.d)
+
 obj/%.o: %.cpp
 	$(CXX) -c $(CFLAGS) -MMD -MF $(@:%.o=%.d) -o $@ $<
 	@cp $(@:%.o=%.d) $(@:%.o=%.P); \
@@ -148,28 +199,26 @@ obj/%.o: %.cpp
 	      -e '/^$$/ d' -e 's/$$/ :/' < $(@:%.o=%.d) >> $(@:%.o=%.P); \
 	  rm -f $(@:%.o=%.d)
 
-obj/zerocoin/%.o: zerocoin/%.cpp
-	$(CXX) -c $(xCXXFLAGS) -MMD -MF $(@:%.o=%.d) -o $@ $<
-	@cp $(@:%.o=%.d) $(@:%.o=%.P); \
-	  sed -e 's/#.*//' -e 's/^[^:]*: *//' -e 's/ *\\$$//' \
-	      -e '/^$$/ d' -e 's/$$/ :/' < $(@:%.o=%.d) >> $(@:%.o=%.P); \
-	  rm -f $(@:%.o=%.d)
-
-obj/scrypt-x86.o: scrypt-x86.S
-	$(CXX) -c $(xCXXFLAGS) -MMD -o $@ $<
-
-obj/scrypt-x86_64.o: scrypt-x86_64.S
-	$(CXX) -c $(xCXXFLAGS) -MMD -o $@ $<
-
 Influxd: $(OBJS:obj/%=obj/%)
 	$(CXX) $(CFLAGS) -o $@ $(LIBPATHS) $^ $(LIBS)
 
 clean:
 	-rm -f Influxd
 	-rm -f obj/*.o
-	-rm -f obj/zerocoin/*.o
 	-rm -f obj/*.P
-	-rm -f obj/zerocoin/*.P
+	-rm -f obj/*.d
+	-rm -f crypto/scrypt/asm/obj/*.o
+	-rm -f crypto/scrypt/asm/obj/*.P
+	-rm -f crypto/scrypt/asm/obj/*.d
+	-rm -f crypto/scrypt/intrin/obj/*.o
+	-rm -f crypto/scrypt/intrin/obj/*.P
+	-rm -f crypto/scrypt/intrin/obj/*.d
+	-rm -f crypto/scrypt/generic/obj/*.o
+	-rm -f crypto/scrypt/generic/obj/*.P
+	-rm -f crypto/scrypt/generic/obj/*.d
+	-rm -f crypto/sha2/asm/obj/*.o
+	-rm -f crypto/sha2/asm/obj/*.P
+	-rm -f crypto/sha2/asm/obj/*.d
 	-rm -f obj/build.h
 
 FORCE:

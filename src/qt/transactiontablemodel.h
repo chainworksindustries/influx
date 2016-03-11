@@ -44,12 +44,12 @@ public:
         AmountRole,
         /** Unique identifier */
         TxIDRole,
+        /** Transaction hash */
+        TxHashRole,
         /** Is transaction confirmed? */
         ConfirmedRole,
         /** Formatted amount, without brackets when unconfirmed */
-        FormattedAmountRole,
-        /** Transaction status (TransactionRecord::Status) */
-        StatusRole
+        FormattedAmountRole
     };
 
     int rowCount(const QModelIndex &parent) const;
@@ -57,6 +57,7 @@ public:
     QVariant data(const QModelIndex &index, int role) const;
     QVariant headerData(int section, Qt::Orientation orientation, int role) const;
     QModelIndex index(int row, int column, const QModelIndex & parent = QModelIndex()) const;
+    void refresh();
 private:
     CWallet* wallet;
     WalletModel *walletModel;
@@ -79,6 +80,8 @@ public slots:
     void updateTransaction(const QString &hash, int status);
     void updateConfirmations();
     void updateDisplayUnit();
+    /** Updates the column title to "Amount (DisplayUnit)" and emits headerDataChanged() signal for table headers to react. */
+    void updateAmountColumnTitle();
 
     friend class TransactionTablePriv;
 };

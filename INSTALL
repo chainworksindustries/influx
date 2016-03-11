@@ -1,14 +1,9 @@
 Building Influx
 
-See doc/readme-qt.rst for instructions on building Influx,
+See doc/readme-qt.rst for instructions on building Influx Qt,
 the intended-for-end-users, nice-graphical-interface, reference
 implementation of Influx.
 
 See doc/build-*.txt for instructions on building Influxd,
 the intended-for-services, no-graphical-interface, reference
 implementation of Influx.
-
-
-
-
-

@@ -1,9 +1,0 @@
-#!/bin/sh
-# postrm script
-#
-# see: dh_installdeb(1)
-
-set -e
-exit 0
-
-

@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include "addrman.h"
+#include "hash.h"
 
 using namespace std;
 
@@ -321,8 +322,8 @@ bool CAddrMan::Add_(const CAddress &addr, const CNetAddr& source, int64_t nTimeP
     if (pinfo)
     {
         // periodically update nTime
-        bool fCurrentlyOnline = (GetAdjustedTime() - addr.nTime < 24 * 60 * 60);
-        int64_t nUpdateInterval = (fCurrentlyOnline ? 60 * 60 : 24 * 60 * 60);
+        bool fCurrentlyOnline = (GetAdjustedTime() - addr.nTime < nOneDay);
+        int64_t nUpdateInterval = (fCurrentlyOnline ? nOneHour : nOneDay);
         if (addr.nTime && (!pinfo->nTime || pinfo->nTime < addr.nTime - nUpdateInterval - nTimePenalty))
             pinfo->nTime = max((int64_t)0, addr.nTime - nTimePenalty);
 
@@ -492,17 +493,28 @@ int CAddrMan::Check_()
 
 void CAddrMan::GetAddr_(std::vector<CAddress> &vAddr)
 {
-    int nNodes = ADDRMAN_GETADDR_MAX_PCT*vRandom.size()/100;
+    size_t nNodes = ADDRMAN_GETADDR_MAX_PCT*vRandom.size()/100;
     if (nNodes > ADDRMAN_GETADDR_MAX)
         nNodes = ADDRMAN_GETADDR_MAX;
 
     // perform a random shuffle over the first nNodes elements of vRandom (selecting from all)
-    for (int n = 0; n<nNodes; n++)
+    for (unsigned int n = 0; n<nNodes; n++)
     {
         int nRndPos = GetRandInt(vRandom.size() - n) + n;
         SwapRandom(n, nRndPos);
         assert(mapInfo.count(vRandom[n]) == 1);
         vAddr.push_back(mapInfo[vRandom[n]]);
+    }
+}
+
+void CAddrMan::GetOnlineAddr_(std::vector<CAddrInfo> &vAddr)
+{
+    for (std::map<int, CAddrInfo>::const_iterator it = mapInfo.begin(); it != mapInfo.end(); it++)
+    {
+        CAddrInfo addr = it->second;
+        bool fCurrentlyOnline = (GetAdjustedTime() - addr.nTime < nOneDay);
+        if (fCurrentlyOnline)
+            vAddr.push_back(addr);
     }
 }
 

@@ -11,13 +11,23 @@
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
+#ifndef _MSC_VER
+#ifdef FD_SETSIZE
+#undef FD_SETSIZE
+#endif
+#define FD_SETSIZE 1024 // max number of fds in fd_set
+#endif
 #include <winsock2.h>
 #include <mswsock.h>
 #include <ws2tcpip.h>
 #else
 #include <sys/types.h>
 #include <sys/socket.h>
+#ifdef ANDROID
+#include <fcntl.h>
+#else
 #include <sys/fcntl.h>
+#endif
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <net/if.h>
@@ -26,7 +36,6 @@
 
 typedef u_int SOCKET;
 #endif
-
 
 #ifdef WIN32
 #define MSG_NOSIGNAL        0
@@ -60,6 +69,5 @@ inline int myclosesocket(SOCKET& hSocket)
     return ret;
 }
 #define closesocket(s)      myclosesocket(s)
-
 
 #endif

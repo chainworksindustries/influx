@@ -14,32 +14,32 @@ class TransactionStatus
 {
 public:
     TransactionStatus():
-            countsForBalance(false), sortKey(""),
+            confirmed(false), sortKey(""), maturity(Mature),
             matures_in(0), status(Offline), depth(0), open_for(0), cur_num_blocks(-1)
     { }
 
-    enum Status {
-        Confirmed,          /**< Have 6 or more confirmations (normal tx) or fully mature (mined tx) **/
-        /// Normal (sent/received) transactions
-        OpenUntilDate,      /**< Transaction not yet final, waiting for date */
-        OpenUntilBlock,     /**< Transaction not yet final, waiting for block */
-        Offline,            /**< Not sent to any other nodes **/
-        Unconfirmed,        /**< Not yet mined into a block **/
-        Confirming,         /**< Confirmed, but waiting for the recommended number of confirmations **/
-        Conflicted,         /**< Conflicts with other transaction or mempool **/
-        /// Generated (mined) transactions
-        Immature,           /**< Mined but waiting for maturity */
-        MaturesWarning,     /**< Transaction will likely not mature because no nodes have confirmed */
-        NotAccepted         /**< Mined but not accepted */
+    enum Maturity
+    {
+        Immature,
+        Mature,
+        MaturesWarning, /**< Transaction will likely not mature because no nodes have confirmed */
+        NotAccepted
     };
 
-    /// Transaction counts towards available balance
-    bool countsForBalance;
-    /// Sorting key based on status
+    enum Status {
+        OpenUntilDate,
+        OpenUntilBlock,
+        Offline,
+        Unconfirmed,
+        HaveConfirmations
+    };
+
+    bool confirmed;
     std::string sortKey;
 
     /** @name Generated (mined) transactions
        @{*/
+    Maturity maturity;
     int matures_in;
     /**@}*/
 
@@ -71,8 +71,8 @@ public:
         SendToSelf
     };
 
-    /** Number of confirmation recommended for accepting a transaction */
-    static const int RecommendedNumConfirmations = 10;
+    /** Number of confirmation needed for transaction */
+    static const int NumConfirmations = 6;
 
     TransactionRecord():
             hash(), time(0), type(Other), address(""), debit(0), credit(0), idx(0)
@@ -101,11 +101,11 @@ public:
     /** @name Immutable transaction attributes
       @{*/
     uint256 hash;
-    qint64 time;
+    int64_t time;
     Type type;
     std::string address;
-    qint64 debit;
-    qint64 credit;
+    int64_t debit;
+    int64_t credit;
     /**@}*/
 
     /** Subtransaction index, for sort key */

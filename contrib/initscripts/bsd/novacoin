@@ -1,0 +1,68 @@
+#!/bin/sh
+
+# PROVIDE: Influx
+# REQUIRE: LOGIN
+# KEYWORD: shutdown
+
+#
+# Add the following lines to /etc/rc.conf.local or /etc/rc.conf
+# to enable this service:
+#
+# Influx_enable (bool): Set to NO by default. Set this variable to YES if you want to enable Influx service.
+# Influx_config (path): Set to /usr/local/etc/Influx.conf by default.
+# Influx_user:  The user account Influx daemon runs as. It uses 'root' user by default.
+# Influx_group: The group account Influx daemon runs as. It uses 'wheel' group by default.
+# Influx_datadir (str): Default to "/var/db/Influx". Base data directory.
+
+. /etc/rc.subr
+
+name=Influx
+rcvar=Influx_enable
+
+: ${Influx_enable:=NO}
+: ${Influx_config=/usr/local/etc/Influx.conf}
+: ${Influx_datadir=/var/db/Influx}
+: ${Influx_user="root"}
+: ${Influx_group="wheel"}
+
+required_files=${Influx_config}
+command=/usr/local/bin/Influxd
+Influx_chdir=${Influx_datadir}
+pidfile="${Influx_datadir}/Influxd.pid"
+stop_cmd=Influx_stop
+command_args="-conf=${Influx_config} -datadir=${Influx_datadir} -daemon -pid=${pidfile}"
+start_precmd="${name}_prestart"
+
+Influx_create_datadir()
+{
+	echo "Creating data directory"
+	eval mkdir -p ${Influx_datadir}
+	[ $? -eq 0 ] && chown -R ${Influx_user}:${Influx_group} ${Influx_datadir}
+}
+
+Influx_prestart()
+{
+	if [ ! -d "${Influx_datadir}/." ]; then
+		Influx_create_datadir || return 1
+	fi
+}
+
+Influx_requirepidfile()
+{
+	if [ ! "0`check_pidfile ${pidfile} ${command}`" -gt 1 ]; then
+		echo "${name} not running? (check $pidfile)."
+		exit 1
+	fi
+}
+
+Influx_stop()
+{
+    Influx_requirepidfile
+
+	echo "Stopping ${name}."
+	eval ${command} -conf=${Influx_config} -datadir=${Influx_datadir} stop
+	wait_for_pids ${rc_pid}
+}
+
+load_rc_config $name
+run_rc_command "$1"

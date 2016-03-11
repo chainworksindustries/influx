@@ -24,6 +24,7 @@ bool static ApplyProxySettings()
     }
     if (nSocksVersion && !addrProxy.IsValid())
         return false;
+
     if (!IsLimited(NET_IPV4))
         SetProxy(NET_IPV4, addrProxy, nSocksVersion);
     if (nSocksVersion > 4) {
@@ -31,8 +32,27 @@ bool static ApplyProxySettings()
         if (!IsLimited(NET_IPV6))
             SetProxy(NET_IPV6, addrProxy, nSocksVersion);
 #endif
-        SetNameProxy(addrProxy, nSocksVersion);
     }
+
+    SetNameProxy(addrProxy, nSocksVersion);
+
+    return true;
+}
+
+bool static ApplyTorSettings()
+{
+    QSettings settings;
+    CService addrTor(settings.value("addrTor", "127.0.0.1:9050").toString().toStdString());
+    if (!settings.value("fUseTor", false).toBool()) {
+        addrTor = CService();
+        return false;
+    }
+    if (!addrTor.IsValid())
+        return false;
+
+    SetProxy(NET_TOR, addrTor, 5);
+    SetReachable(NET_TOR);
+
     return true;
 }
 
@@ -43,86 +63,47 @@ void OptionsModel::Init()
     // These are Qt-only settings:
     nDisplayUnit = settings.value("nDisplayUnit", BitcoinUnits::BTC).toInt();
     bDisplayAddresses = settings.value("bDisplayAddresses", false).toBool();
+    if (!settings.contains("strThirdPartyTxUrls")) {
+        if(fTestNet)
+            settings.setValue("strThirdPartyTxUrls", "");
+        else
+            settings.setValue("strThirdPartyTxUrls", "");
+    }
+    strThirdPartyTxUrls = settings.value("strThirdPartyTxUrls", "").toString();
     fMinimizeToTray = settings.value("fMinimizeToTray", false).toBool();
     fMinimizeOnClose = settings.value("fMinimizeOnClose", false).toBool();
     fCoinControlFeatures = settings.value("fCoinControlFeatures", false).toBool();
     nTransactionFee = settings.value("nTransactionFee").toLongLong();
-    nReserveBalance = settings.value("nReserveBalance").toLongLong();
     language = settings.value("language", "").toString();
 
     // These are shared with core Bitcoin; we want
     // command-line options to override the GUI settings:
-    if (settings.contains("fUseUPnP"))
-        SoftSetBoolArg("-upnp", settings.value("fUseUPnP").toBool());
-    if (settings.contains("addrProxy") && settings.value("fUseProxy").toBool())
-        SoftSetArg("-proxy", settings.value("addrProxy").toString().toStdString());
-    if (settings.contains("nSocksVersion") && settings.value("fUseProxy").toBool())
-        SoftSetArg("-socks", settings.value("nSocksVersion").toString().toStdString());
+    if ( !(settings.value("fTorOnly").toBool() && settings.contains("addrTor")) ) {
+        if (settings.contains("addrProxy") && settings.value("fUseProxy").toBool())
+            SoftSetArg("-proxy", settings.value("addrProxy").toString().toStdString());
+        if (settings.contains("nSocksVersion") && settings.value("fUseProxy").toBool())
+            SoftSetArg("-socks", settings.value("nSocksVersion").toString().toStdString());
+    }
+
+    if (settings.contains("addrTor") && settings.value("fUseTor").toBool()) {
+        SoftSetArg("-tor", settings.value("addrTor").toString().toStdString());
+        if (settings.value("fTorOnly").toBool())
+            SoftSetArg("-onlynet", "tor");
+
+        if (settings.value("TorName").toString().length() == 22) {
+            std::string strTorName = settings.value("TorName").toString().toStdString();
+
+            CService addrTorName(strTorName, GetListenPort());
+            if (addrTorName.IsValid())
+                SoftSetArg("-torname", strTorName);
+        }
+    }
+
     if (settings.contains("detachDB"))
         SoftSetBoolArg("-detachdb", settings.value("detachDB").toBool());
     if (!language.isEmpty())
         SoftSetArg("-lang", language.toStdString());
 }
-
-bool OptionsModel::Upgrade()
-{
-    QSettings settings;
-
-    if (settings.contains("bImportFinished"))
-        return false; // Already upgraded
-
-    settings.setValue("bImportFinished", true);
-
-    // Move settings from old wallet.dat (if any):
-    CWalletDB walletdb(strWalletFileName);
-
-    QList<QString> intOptions;
-    intOptions << "nDisplayUnit" << "nTransactionFee" << "nReserveBalance";
-    foreach(QString key, intOptions)
-    {
-        int value = 0;
-        if (walletdb.ReadSetting(key.toStdString(), value))
-        {
-            settings.setValue(key, value);
-            walletdb.EraseSetting(key.toStdString());
-        }
-    }
-    QList<QString> boolOptions;
-    boolOptions << "bDisplayAddresses" << "fMinimizeToTray" << "fMinimizeOnClose" << "fUseProxy" << "fUseUPnP";
-    foreach(QString key, boolOptions)
-    {
-        bool value = false;
-        if (walletdb.ReadSetting(key.toStdString(), value))
-        {
-            settings.setValue(key, value);
-            walletdb.EraseSetting(key.toStdString());
-        }
-    }
-    try
-    {
-        CAddress addrProxyAddress;
-        if (walletdb.ReadSetting("addrProxy", addrProxyAddress))
-        {
-            settings.setValue("addrProxy", addrProxyAddress.ToStringIPPort().c_str());
-            walletdb.EraseSetting("addrProxy");
-        }
-    }
-    catch (std::ios_base::failure &e)
-    {
-        // 0.6.0rc1 saved this as a CService, which causes failure when parsing as a CAddress
-        CService addrProxy;
-        if (walletdb.ReadSetting("addrProxy", addrProxy))
-        {
-            settings.setValue("addrProxy", addrProxy.ToStringIPPort().c_str());
-            walletdb.EraseSetting("addrProxy");
-        }
-    }
-    ApplyProxySettings();
-    Init();
-
-    return true;
-}
-
 
 int OptionsModel::rowCount(const QModelIndex & parent) const
 {
@@ -140,8 +121,6 @@ QVariant OptionsModel::data(const QModelIndex & index, int role) const
             return QVariant(GUIUtil::GetStartOnSystemStartup());
         case MinimizeToTray:
             return QVariant(fMinimizeToTray);
-        case MapPortUPnP:
-            return settings.value("fUseUPnP", GetBoolArg("-upnp", true));
         case MinimizeOnClose:
             return QVariant(fMinimizeOnClose);
         case ProxyUse:
@@ -158,18 +137,38 @@ QVariant OptionsModel::data(const QModelIndex & index, int role) const
             if (GetProxy(NET_IPV4, proxy))
                 return QVariant(proxy.first.GetPort());
             else
-                return QVariant(9050);
+                return QVariant(nSocksDefault);
         }
         case ProxySocksVersion:
             return settings.value("nSocksVersion", 5);
+        case TorUse:
+            return settings.value("fUseTor", false);
+        case TorIP: {
+            proxyType proxy;
+            if (GetProxy(NET_TOR, proxy))
+                return QVariant(QString::fromStdString(proxy.first.ToStringIP()));
+            else
+                return QVariant(QString::fromStdString("127.0.0.1"));
+        }
+        case TorPort: {
+            proxyType proxy;
+            if (GetProxy(NET_TOR, proxy))
+                return QVariant(proxy.first.GetPort());
+            else
+                return QVariant(nSocksDefault);
+        }
+        case TorOnly:
+            return settings.value("fTorOnly", false);
+        case TorName:
+            return settings.value("TorName", "");
         case Fee:
-            return QVariant((qint64) nTransactionFee);
-        case ReserveBalance:
-            return QVariant((qint64) nReserveBalance);
+            return QVariant(static_cast<qlonglong>(nTransactionFee));
         case DisplayUnit:
             return QVariant(nDisplayUnit);
         case DisplayAddresses:
             return QVariant(bDisplayAddresses);
+        case ThirdPartyTxUrls:
+            return QVariant(strThirdPartyTxUrls);
         case DetachDatabases:
             return QVariant(bitdb.GetDetach());
         case Language:
@@ -198,11 +197,6 @@ bool OptionsModel::setData(const QModelIndex & index, const QVariant & value, in
             fMinimizeToTray = value.toBool();
             settings.setValue("fMinimizeToTray", fMinimizeToTray);
             break;
-        case MapPortUPnP:
-            fUseUPnP = value.toBool();
-            settings.setValue("fUseUPnP", fUseUPnP);
-            MapPort();
-            break;
         case MinimizeOnClose:
             fMinimizeOnClose = value.toBool();
             settings.setValue("fMinimizeOnClose", fMinimizeOnClose);
@@ -213,7 +207,7 @@ bool OptionsModel::setData(const QModelIndex & index, const QVariant & value, in
             break;
         case ProxyIP: {
             proxyType proxy;
-            proxy.first = CService("127.0.0.1", 9050);
+            proxy.first = CService("127.0.0.1", nSocksDefault);
             GetProxy(NET_IPV4, proxy);
 
             CNetAddr addr(value.toString().toStdString());
@@ -224,7 +218,7 @@ bool OptionsModel::setData(const QModelIndex & index, const QVariant & value, in
         break;
         case ProxyPort: {
             proxyType proxy;
-            proxy.first = CService("127.0.0.1", 9050);
+            proxy.first = CService("127.0.0.1", nSocksDefault);
             GetProxy(NET_IPV4, proxy);
 
             proxy.first.SetPort(value.toInt());
@@ -242,15 +236,44 @@ bool OptionsModel::setData(const QModelIndex & index, const QVariant & value, in
             successful = ApplyProxySettings();
         }
         break;
+        case TorUse: {
+            settings.setValue("fUseTor", value.toBool());
+            ApplyTorSettings();
+        }
+        break;
+        case TorIP: {
+            proxyType proxy;
+            proxy.first = CService("127.0.0.1", nSocksDefault);
+            GetProxy(NET_TOR, proxy);
+
+            CNetAddr addr(value.toString().toStdString());
+            proxy.first.SetIP(addr);
+            settings.setValue("addrTor", proxy.first.ToStringIPPort().c_str());
+            successful = ApplyTorSettings();
+        }
+        break;
+        case TorPort: {
+            proxyType proxy;
+            proxy.first = CService("127.0.0.1", nSocksDefault);
+            GetProxy(NET_TOR, proxy);
+
+            proxy.first.SetPort((uint16_t)value.toUInt());
+            settings.setValue("addrTor", proxy.first.ToStringIPPort().c_str());
+            successful = ApplyTorSettings();
+        }
+        break;
+        case TorOnly: {
+            settings.setValue("fTorOnly", value.toBool());
+            ApplyTorSettings();
+        }
+        case TorName: {
+            settings.setValue("TorName", value.toString());
+        }
+        break;
         case Fee:
             nTransactionFee = value.toLongLong();
-            settings.setValue("nTransactionFee", (qint64) nTransactionFee);
+            settings.setValue("nTransactionFee", static_cast<qlonglong>(nTransactionFee));
             emit transactionFeeChanged(nTransactionFee);
-            break;
-        case ReserveBalance:
-            nReserveBalance = value.toLongLong();
-            settings.setValue("nReserveBalance", (qint64) nReserveBalance);
-            emit reserveBalanceChanged(nReserveBalance);
             break;
         case DisplayUnit:
             nDisplayUnit = value.toInt();
@@ -265,6 +288,12 @@ bool OptionsModel::setData(const QModelIndex & index, const QVariant & value, in
             bool fDetachDB = value.toBool();
             bitdb.SetDetach(fDetachDB);
             settings.setValue("detachDB", fDetachDB);
+            }
+            break;
+        case ThirdPartyTxUrls:
+            if (strThirdPartyTxUrls != value.toString()) {
+                strThirdPartyTxUrls = value.toString();
+                settings.setValue("strThirdPartyTxUrls", strThirdPartyTxUrls);
             }
             break;
         case Language:
@@ -288,11 +317,6 @@ bool OptionsModel::setData(const QModelIndex & index, const QVariant & value, in
 qint64 OptionsModel::getTransactionFee()
 {
     return nTransactionFee;
-}
-
-qint64 OptionsModel::getReserveBalance()
-{
-    return nReserveBalance;
 }
 
 bool OptionsModel::getCoinControlFeatures()

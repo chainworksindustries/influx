@@ -13,12 +13,13 @@
 #include "serialize.h"
 #include "netbase.h"
 #include <string>
+#include <limits>
 #include "uint256.h"
 
 extern bool fTestNet;
 static inline unsigned short GetDefaultPort(const bool testnet = fTestNet)
 {
-    return testnet ? 33542 : 9238;
+    return testnet ? 17778 : 9238;
 }
 
 

@@ -14,7 +14,7 @@ static const int STATUSBAR_ICONSIZE = 16;
 #define STYLE_INVALID "background:#FF8080"
 
 /* Transaction list -- unconfirmed transaction */
-#define COLOR_UNCONFIRMED QColor(190, 190, 190)
+#define COLOR_UNCONFIRMED QColor(128, 128, 128)
 /* Transaction list -- negative amount */
 #define COLOR_NEGATIVE QColor(255, 0, 0)
 /* Transaction list -- bare address (without label) */
@@ -30,5 +30,10 @@ static const int MAX_URI_LENGTH = 255;
 
 /* QRCodeDialog -- size of exported QR Code image */
 #define EXPORT_IMAGE_SIZE 256
+
+/* Colors for minting tab for each coin age group */
+#define COLOR_MINT_YOUNG QColor(180, 180, 250)
+#define COLOR_MINT_MATURE QColor(180, 250, 180)
+#define COLOR_MINT_OLD QColor(250, 180, 180)
 
 #endif // GUICONSTANTS_H

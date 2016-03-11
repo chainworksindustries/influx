@@ -33,8 +33,6 @@ BitcoinAmountField::BitcoinAmountField(QWidget *parent):
     layout->setContentsMargins(0,0,0,0);
 
     setLayout(layout);
-    amount->setFrame(false);
-    unit->setFrame(false);
 
     setFocusPolicy(Qt::TabFocus);
     setFocusProxy(amount);

@@ -1,0 +1,5 @@
+Influx-qt usr/bin
+share/pixmaps/Influx32.xpm usr/share/pixmaps
+share/pixmaps/Influx80.xpm usr/share/pixmaps
+debian/Influx-qt.desktop usr/share/applications
+debian/Influx-qt.protocol usr/share/kde4/services/

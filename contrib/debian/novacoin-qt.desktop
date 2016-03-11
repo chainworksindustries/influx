@@ -1,0 +1,13 @@
+[Desktop Entry]
+Encoding=UTF-8
+Name=Influx
+Comment=Influx P2P Cryptocurrency
+Comment[ru]=Influx, P2P криптовалюта
+Comment[fr]=Influx, monnaie virtuelle cryptographique pair à pair
+Comment[tr]=Influx, eşten eşe kriptografik sanal para birimi
+Exec=/usr/bin/Influx-qt
+Terminal=false
+Type=Application
+Icon=/usr/share/pixmaps/Influx80.xpm
+MimeType=x-scheme-handler/Influx;
+Categories=Office;
