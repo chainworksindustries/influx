@@ -1,4 +1,4 @@
-Find out more by visiting http://influxcoin.xyz!
+Find out more by visiting http://influxcoin.xyz! Checkout our [Wiki](https://github.com/influxteam/influx/wiki) for news, information, and tutorials.
 
 Sample Influx.conf file:
 ```
@@ -11,18 +11,17 @@ Sample Influx.conf file:
   rpcport=9239
   port=9238
 ```
-To install Influx-QT via bash script to a RaspberryPi 2, simply copy and paste this:
+To install Influx-QT via bash script to a Raspberry Pi, simply copy and paste this:
 ```
-wget https://gist.githubusercontent.com/sigwo/571296dcb54ff6d4109b/raw/eee88bfc85a59498f25bac1f487bcccfdc56b87b/install-INFX.sh;chmod +x install-INFX.sh;sh ./install-INFX.sh
+wget https://gist.githubusercontent.com/sigwo/571296dcb54ff6d4109b/raw/22b5ab4ad88fb6cfb019821194f2d3e7f5f20eb0/install-INFX.sh;chmod +x install-INFX.sh;sh ./install-INFX.sh
 ```
-
+To install influxd via bash script to a Raspberry Pi, simply copy and paste this:
+```
+wget https://gist.githubusercontent.com/sigwo/02dcc1129d149a6825fb82f9f4f400d8/raw/3e2a0a789a2c84ce496cd4616ab6531c50bb1067/build_infx_daemon.sh;chmod +x build_infx_daemon.sh;sh ./build_infx_daemon.sh
+```
 ===========================
 
-
-Influx official development tree
-
 Influx - a hybrid scrypt PoW + PoS based cryptocurrency.
-
 
 Development process
 ===========================
