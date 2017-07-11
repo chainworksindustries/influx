@@ -1009,7 +1009,7 @@ static const char *strDNSSeed[][2] = {
 	{"infx-seed68.chainworksindustries.com", "infx-seed68.chainworksindustries.com"},
 	{"infx-seed69.chainworksindustries.com", "infx-seed69.chainworksindustries.com"},
 	{"infx-seed70.chainworksindustries.com", "infx-seed70.chainworksindustries.com"},
-	{NULL, NULL}
+	{"NULL", "NULL"}
 
 };
 
